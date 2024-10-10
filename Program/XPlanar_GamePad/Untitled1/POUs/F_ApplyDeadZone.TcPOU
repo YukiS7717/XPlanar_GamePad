@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_ApplyDeadZone" Id="{f3dfd142-3cb0-4fae-a57d-26518e6fe56a}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_ApplyDeadZone : LREAL
+VAR_INPUT
+	lrValue						: LREAL;
+	lrDeadzone					: LREAL;
+	lrMaxValue					: LREAL;
+END_VAR
+VAR
+	lrAbsValue					: LREAL;
+	lrOutput					: LREAL;
+	lrScale						: LREAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[lrAbsValue := ABS(lrValue);
+
+IF lrAbsValue <= lrDeadzone THEN
+	lrOutput := 0;
+ELSE
+	lrScale := lrMaxValue / (lrMaxValue - lrDeadzone);
+	lrOutput := (lrAbsValue - lrDeadzone) * lrScale;
+	
+	//search minimum value among the argument
+	lrOutput := MIN(lrOutput, lrMaxValue);
+END_IF
+
+IF lrValue < 0 THEN
+	lrOutput := -lrOutput;
+END_IF
+
+F_ApplyDeadZone := lrOutput;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,633 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_XPlanarGamePad" Id="{d9dfe6f5-63c0-40ac-8f62-57f7720f7ddc}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_XPlanarGamePad
+VAR_IN_OUT
+	fbMover							: MC_PlanarMover;
+	fbMoverAxis						: ARRAY [1..cuiMoverAxisSize] OF AXIS_REF;
+END_VAR
+VAR_INPUT
+	stGamePad						: ST_GamePad;
+	lrStickDeadZone					: LREAL;
+END_VAR
+VAR_OUTPUT
+	stStatus						: uiStatus_XPGamePad;
+END_VAR
+
+VAR //checkgamepad
+	afbR_Trig						: ARRAY [0..cuiGamePadSize] OF R_TRIG;
+	abToggle						: ARRAY [0..cuiGamePadSize] OF BOOL;
+	abBusy							: ARRAY [0..cuiGamePadSize] OF BOOL;
+	afbFeedback						: ARRAY [0..cuiGamePadSize] OF MC_PlanarFeedback;
+END_VAR
+VAR //command
+	//General
+	uiCommand						: UINT; //command method
+	stActPos						: MoverVector;
+	lrLimitFreeMove_XY				: LREAL := 43;
+	lrLimitFreeMove_AB				: LREAL := 1;
+	//Dpad
+	stPosition_Dpad					: PositionXYC;
+	stCondition_Dpad				: DynamicConstraint_PathXY;
+	//LeftStickX
+	afbMoveAbs_LeftStickX			: ARRAY [0..1] OF MC_MoveAbsolute;
+	lrPosition_LeftStickX			: LREAL;
+	lrTempPosition_LeftStickX		: LREAL;
+	//LeftStickY
+	afbMoveAbs_LeftStickY			: ARRAY [0..1] OF MC_MoveAbsolute;
+	lrPosition_LeftStickY			: LREAL;
+	lrTempPosition_LeftStickY		: LREAL;
+	//RightStickX
+	afbMoveAbs_RightStickX			: ARRAY [0..1] OF MC_MoveAbsolute;
+	lrPosition_RightStickX			: LREAL;
+	lrTempPosition_RightStickX		: LREAL;
+	//RightStickY
+	afbMoveAbs_RightStickY			: ARRAY [0..1] OF MC_MoveAbsolute;
+	lrPosition_RightStickY			: LREAL;
+	lrTempPosition_RightStickY		: LREAL;
+	//ButtonA
+	lrPosition_ButtonA				: LREAL;
+	stCondition_ButtonA				: DynamicConstraint_PathXY;
+	//ButtonLR
+	lrPosition_ButtonLR				: LREAL;
+	stCondition_ButtonLR			: DynamicConstraint_PathXY;
+
+	//Start
+	afbPower						: ARRAY [1..cuiMoverAxisSize] OF MC_Power;
+	bPowered						: BOOL; //Power
+END_VAR
+VAR //externalsetpoint
+	stSetpoint_Pos					: MoverVector;
+	stSetpoint_Vel					: MoverVector;
+	stSetpoint_Acc					: MoverVector;
+	stESGOptions					: ST_ExternalSetpointGenerationOptions;
+END_VAR
+VAR //FB
+	uiIndex							: UINT;
+END_VAR
+VAR CONSTANT
+	cuiLimitStick					: UINT := 32767;
+	cuiMoverAxisSize				: UINT := 6;
+	cuiGamePadSize					: UINT := 30;
+	
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[stActPos := fbMover.MCTOPLC.ACT.ActPos;
+
+checkgamepad();
+externalsetpoint();
+
+FOR uiIndex:=0 TO cuiGamePadSize DO
+	afbFeedback[uiIndex].Update();
+END_FOR
+
+]]></ST>
+    </Implementation>
+    <Method Name="checkgamepad" Id="{cd5a66b7-8bbf-4285-b3c0-dd4d583b4717}">
+      <Declaration><![CDATA[METHOD PRIVATE checkgamepad : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//ButtonSelect 
+//Reset errors
+afbR_Trig[uiGamePad.ButtonSelect](CLK:= stGamePad.ButtonSelect, Q=> );
+IF afbR_Trig[uiGamePad.ButtonSelect].Q THEN
+	abToggle[uiGamePad.ButtonSelect] := NOT abToggle[uiGamePad.ButtonSelect];
+END_IF
+uiCommand := uiGamePad.ButtonSelect;
+command();
+checkstatus();
+IF fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Error THEN
+	RETURN;
+END_IF
+
+//ButtonStart 
+//Power
+afbR_Trig[uiGamePad.ButtonStart](CLK:= stGamePad.ButtonStart, Q=> );
+IF afbR_Trig[uiGamePad.ButtonStart].Q THEN
+	abToggle[uiGamePad.ButtonStart] := NOT abToggle[uiGamePad.ButtonStart];
+END_IF
+uiCommand := uiGamePad.ButtonStart;
+command();
+checkstatus();
+IF NOT fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Enabled THEN
+	RETURN;
+END_IF
+
+//Virtual Axis PowerControll
+//Pad
+afbR_Trig[uiGamePad.DPadDown](CLK:= stGamePad.DPadDown, Q=> );
+IF afbR_Trig[uiGamePad.DPadDown].Q THEN
+	abToggle[uiGamePad.DPadDown] := NOT abToggle[uiGamePad.DPadDown];
+END_IF
+afbR_Trig[uiGamePad.DPadLeft](CLK:= stGamePad.DPadLeft, Q=> );
+IF afbR_Trig[uiGamePad.DPadLeft].Q THEN
+	abToggle[uiGamePad.DPadLeft] := NOT abToggle[uiGamePad.DPadLeft];
+END_IF
+afbR_Trig[uiGamePad.DPadRight](CLK:= stGamePad.DPadRight, Q=> );
+IF afbR_Trig[uiGamePad.DPadRight].Q THEN
+	abToggle[uiGamePad.DPadRight] := NOT abToggle[uiGamePad.DPadRight];
+END_IF
+afbR_Trig[uiGamePad.DPadUp](CLK:= stGamePad.DPadUp, Q=> );
+IF afbR_Trig[uiGamePad.DPadUp].Q THEN
+	abToggle[uiGamePad.DPadUp] := NOT abToggle[uiGamePad.DPadUp];
+END_IF
+IF afbR_Trig[uiGamePad.DPadUp].Q 
+OR afbR_Trig[uiGamePad.DPadDown].Q 
+OR afbR_Trig[uiGamePad.DPadLeft].Q 
+OR afbR_Trig[uiGamePad.DPadRight].Q THEN
+	abToggle[uiGamePad.Dpad] := NOT abToggle[uiGamePad.Dpad];
+END_IF
+uiCommand := uiGamePad.Dpad;
+command();
+checkstatus();
+//ButtonA 
+//move z
+afbR_Trig[uiGamePad.ButtonA](CLK:= stGamePad.ButtonA, Q=> );
+IF afbR_Trig[uiGamePad.ButtonA].Q THEN
+	abToggle[uiGamePad.ButtonA] := NOT abToggle[uiGamePad.ButtonA];
+END_IF
+uiCommand := uiGamePad.ButtonA;
+command();
+checkstatus();
+//ButtonB
+afbR_Trig[uiGamePad.ButtonB](CLK:= stGamePad.ButtonB, Q=> );
+IF afbR_Trig[uiGamePad.ButtonB].Q THEN
+	abToggle[uiGamePad.ButtonB] := NOT abToggle[uiGamePad.ButtonB];
+END_IF
+uiCommand := uiGamePad.ButtonB;
+command();
+checkstatus();
+//ButtonX
+afbR_Trig[uiGamePad.ButtonX](CLK:= stGamePad.ButtonA, Q=> );
+IF afbR_Trig[uiGamePad.ButtonX].Q THEN
+	abToggle[uiGamePad.ButtonX] := NOT abToggle[uiGamePad.ButtonX];
+END_IF
+uiCommand := uiGamePad.ButtonX;
+command();
+checkstatus();
+//ButtonY
+afbR_Trig[uiGamePad.ButtonY](CLK:= stGamePad.ButtonY, Q=> );
+IF afbR_Trig[uiGamePad.ButtonY].Q THEN
+	abToggle[uiGamePad.ButtonY] := NOT abToggle[uiGamePad.ButtonY];
+END_IF
+uiCommand := uiGamePad.ButtonY;
+command();
+checkstatus();
+//Button L1 
+//move C
+afbR_Trig[uiGamePad.ButtonL1](CLK:= stGamePad.ButtonL1, Q=> );
+IF afbR_Trig[uiGamePad.ButtonL1].Q THEN
+	abToggle[uiGamePad.ButtonL1] := NOT abToggle[uiGamePad.ButtonL1];
+END_IF
+afbR_Trig[uiGamePad.ButtonR1](CLK:= stGamePad.ButtonR1, Q=> );
+IF afbR_Trig[uiGamePad.ButtonR1].Q THEN
+	abToggle[uiGamePad.ButtonR1] := NOT abToggle[uiGamePad.ButtonR1];
+END_IF
+afbR_Trig[uiGamePad.ButtonL2](CLK:= stGamePad.ButtonL2, Q=> );
+IF afbR_Trig[uiGamePad.ButtonL2].Q THEN
+	abToggle[uiGamePad.ButtonL2] := NOT abToggle[uiGamePad.ButtonL2];
+END_IF
+afbR_Trig[uiGamePad.ButtonR2](CLK:= stGamePad.ButtonR2, Q=> );
+IF afbR_Trig[uiGamePad.ButtonR2].Q THEN
+	abToggle[uiGamePad.ButtonR2] := NOT abToggle[uiGamePad.ButtonR2];
+END_IF
+IF afbR_Trig[uiGamePad.ButtonL1].Q 
+OR afbR_Trig[uiGamePad.ButtonR1].Q 
+OR afbR_Trig[uiGamePad.ButtonL2].Q 
+OR afbR_Trig[uiGamePad.ButtonR2].Q THEN
+	abToggle[uiGamePad.ButtonLR] := NOT abToggle[uiGamePad.ButtonLR];
+END_IF
+uiCommand := uiGamePad.ButtonLR;
+command();
+checkstatus();
+//Trigger L2
+uiCommand := uiGamePad.TriggerL2;
+command();
+checkstatus();
+//Trigger R2
+uiCommand := uiGamePad.TriggerR2;
+command();
+checkstatus();
+//LStick 
+//move free XY
+uiCommand := uiGamePad.LeftStickX;
+command();
+checkstatus();
+uiCommand := uiGamePad.LeftStickY;
+command();
+checkstatus();
+
+//RStick 
+//move free AB
+uiCommand := uiGamePad.RightStickX;
+command();
+checkstatus();
+uiCommand := uiGamePad.RightStickY;
+command();
+checkstatus();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="checkstatus" Id="{7d50fac8-4fda-4e65-b65e-914dea797f8f}">
+      <Declaration><![CDATA[METHOD PRIVATE checkstatus : UINT
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF abBusy[uiGamePad.Dpad] THEN
+	stStatus := uiStatus_XPGamePad.MovingDpad;
+ELSIF abBusy[uiGamePad.ButtonLR] THEN
+	stStatus := uiStatus_XPGamePad.RotationC;
+ELSIF lrPosition_LeftStickX <> 0 OR lrTempPosition_LeftStickX <> 0
+OR lrPosition_LeftStickY <> 0 OR lrTempPosition_LeftStickY <> 0 THEN
+	stStatus := uiStatus_XPGamePad.CantRotationC;
+ELSIF bPowered THEN
+	stStatus := uiStatus_XPGamePad.Ready;
+ELSE
+	stStatus := uiStatus_XPGamePad.Disable;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="command" Id="{018a0f5d-cb2a-42ce-bd53-fb944e60cfc0}">
+      <Declaration><![CDATA[METHOD PRIVATE command : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	i								: UINT;
+	stSetPos_Dpad					: MoverVector;
+	stCondition_: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[CASE uiCommand OF
+uiGamePad.Dpad: //Move the position that a Mover can rotate C
+	//Cant move until moving XY
+	IF stStatus = uiStatus_XPGamePad.RotationC THEN
+		abToggle[uiGamePad.Dpad] := FALSE;
+		RETURN;
+	END_IF
+		
+	IF abToggle[uiGamePad.Dpad] AND NOT abBusy[uiGamePad.Dpad] THEN
+		//The set position to move
+		//The set position dont be set opposite direction
+		stSetPos_Dpad.c := stActPos.c;
+		IF abToggle[uiGamePad.DPadRight] THEN
+			stSetPos_Dpad.x := stSetPos_Dpad.x + 120;
+		ELSIF abToggle[uiGamePad.DPadLeft] THEN
+			stSetPos_Dpad.x := stSetPos_Dpad.x - 120;
+		END_IF
+		IF abToggle[uiGamePad.DPadUp] THEN
+			stSetPos_Dpad.y := stSetPos_Dpad.y + 120;
+		ELSIF abToggle[uiGamePad.DPadDown] THEN
+			stSetPos_Dpad.y := stSetPos_Dpad.y - 120;
+		END_IF
+		//Set Position and move condition
+		stPosition_Dpad.SetValuesXYC(
+			x:= stSetPos_Dpad.x, y:= stSetPos_Dpad.y, c:= stSetPos_Dpad.c
+		);
+		stCondition_Dpad.SetValuesVADJ(
+			V:= 200, A:= 2000, 
+			D:= 2000, J:= 2000
+		);
+		//A mover is operated to move with XY planar
+		fbMover.MoveToPosition(
+			 commandFeedback:= afbFeedback[uiGamePad.Dpad],
+			 targetPosition:= stPosition_Dpad,
+			 constraint:= stCondition_Dpad,
+			 options:= 0
+		);
+		//check moving
+		abBusy[uiGamePad.Dpad] := TRUE;
+	ELSE
+		//Check a mover finished moving
+		IF NOT afbFeedback[uiGamePad.Dpad].Active THEN
+			abBusy[uiGamePad.Dpad] := FALSE;
+			abToggle[uiGamePad.DPadDown] := FALSE;
+			abToggle[uiGamePad.DPadLeft] := FALSE;
+			abToggle[uiGamePad.DPadRight] := FALSE;
+			abToggle[uiGamePad.DPadUp] := FALSE;
+			abToggle[uiGamePad.Dpad] := FALSE;
+		END_IF
+	END_IF
+		
+uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
+	IF stStatus = uiStatus_XPGamePad.RotationC THEN
+		abToggle[uiGamePad.Dpad] := FALSE;
+		RETURN;
+	END_IF
+	//If MC_MoveAbsolute have error state, Execute need refresh. 
+	IF afbMoveAbs_LeftStickX[0].Error OR afbMoveAbs_LeftStickX[1].Error THEN
+		afbMoveAbs_LeftStickX[0].Execute := FALSE;
+		afbMoveAbs_LeftStickX[1].Execute := FALSE;
+	END_IF
+
+	//Record a previous set position
+	lrTempPosition_LeftStickX := lrPosition_LeftStickX;
+	//Set a position is to avoid falling off around C Rotation
+	//Calculate to correct Lstick
+	lrPosition_LeftStickX := F_ApplyDeadZone(lrValue:= UINT_TO_LREAL(stGamePad.LeftStickX),
+											 lrDeadzone:= lrStickDeadzone, 
+											 lrMaxValue:= UINT_TO_LREAL(cuiLimitStick)) * lrLimitFreeMove_XY;
+	//Alternate orders to MC_MoveAbsolute
+	IF lrTempPosition_LeftStickX <> lrPosition_LeftStickX THEN
+		IF (NOT afbMoveAbs_LeftStickX[0].busy AND NOT afbMoveAbs_LeftStickX[1].busy) 
+		OR (NOT afbMoveAbs_LeftStickX[0].busy AND afbMoveAbs_LeftStickX[1].busy) THEN
+			afbMoveAbs_LeftStickX[0].Execute := TRUE;
+			afbMoveAbs_LeftStickX[1].Execute := FALSE;
+		ELSIF (afbMoveAbs_LeftStickX[0].busy AND NOT afbMoveAbs_LeftStickX[1].busy) THEN
+			afbMoveAbs_LeftStickX[0].Execute := FALSE;
+			afbMoveAbs_LeftStickX[1].Execute := TRUE;
+		ELSE
+			afbMoveAbs_LeftStickX[0].Execute := FALSE;
+			afbMoveAbs_LeftStickX[1].Execute := FALSE;
+		END_IF 
+	END_IF
+	FOR i:=0 TO 1 DO
+		afbMoveAbs_LeftStickX[i](
+			Axis:= fbMoverAxis[1],
+			Position:= lrPosition_LeftStickX, 
+			Velocity:= 100, 
+			Acceleration:= 1000, 
+			Deceleration:= 1000, 
+			Jerk:= 1000 * 10
+		);
+	END_FOR
+
+uiGamePad.LeftStickY: //A mover move in the Y direction with externalsetpoint
+	//Same logic as LeftStickX
+	IF afbMoveAbs_LeftStickY[0].Error OR afbMoveAbs_LeftStickY[1].Error THEN
+		afbMoveAbs_LeftStickY[0].Execute := FALSE;
+		afbMoveAbs_LeftStickY[1].Execute := FALSE;
+	END_IF
+
+	lrTempPosition_LeftStickY := lrPosition_LeftStickY;
+	lrPosition_LeftStickY := lrLimitFreeMove_XY * F_ApplyDeadZone(
+								lrValue:= UINT_TO_LREAL(stGamePad.LeftStickY),
+								lrDeadzone:= lrStickDeadzone, 
+								lrMaxValue:= UINT_TO_LREAL(cuiLimitStick));
+	IF lrTempPosition_LeftStickY <> lrPosition_LeftStickY THEN
+		IF (NOT afbMoveAbs_LeftStickY[0].busy AND NOT afbMoveAbs_LeftStickY[1].busy) 
+		OR (NOT afbMoveAbs_LeftStickY[0].busy AND afbMoveAbs_LeftStickY[1].busy) THEN
+			afbMoveAbs_LeftStickY[0].Execute := TRUE;
+			afbMoveAbs_LeftStickY[1].Execute := FALSE;
+		ELSIF (afbMoveAbs_LeftStickY[0].busy AND NOT afbMoveAbs_LeftStickY[1].busy) THEN
+			afbMoveAbs_LeftStickY[0].Execute := FALSE;
+			afbMoveAbs_LeftStickY[1].Execute := TRUE;
+		ELSE
+			afbMoveAbs_LeftStickY[0].Execute := FALSE;
+			afbMoveAbs_LeftStickY[1].Execute := FALSE;
+		END_IF 
+	END_IF
+	FOR i:=0 TO 1 DO
+		afbMoveAbs_LeftStickY[i](
+			Axis:= fbMoverAxis[2],
+			Position:= lrPosition_LeftStickY, 
+			Velocity:= 100, 
+			Acceleration:= 1000, 
+			Deceleration:= 1000, 
+			Jerk:= 1000 * 10
+		);
+	END_FOR
+
+uiGamePad.RightStickX: //AB free move
+	//Same Logic as LStick
+	IF afbMoveAbs_RightStickX[0].Error OR afbMoveAbs_RightStickX[1].Error THEN
+		afbMoveAbs_RightStickX[0].Execute := FALSE;
+		afbMoveAbs_RightStickX[1].Execute := FALSE;
+	END_IF
+
+	//Calculate the values of the limit according to Z value.
+	lrLimitFreeMove_AB := F_CalculateLimitAB(KindMover:= uiKindMover.AMP4330, z:= stActPos.z);
+	lrTempPosition_RightStickX := lrPosition_RightStickX;
+	lrPosition_RightStickX := F_ApplyDeadZone(lrValue:= UINT_TO_LREAL(stGamePad.RightStickX),
+											 lrDeadzone:= lrStickDeadzone, 
+											 lrMaxValue:= UINT_TO_LREAL(cuiLimitStick)) * lrLimitFreeMove_AB;
+	IF lrTempPosition_RightStickX <> lrPosition_RightStickX THEN
+		IF (NOT afbMoveAbs_RightStickX[0].busy AND NOT afbMoveAbs_RightStickX[1].busy) 
+		OR (NOT afbMoveAbs_RightStickX[0].busy AND afbMoveAbs_RightStickX[1].busy) THEN
+			afbMoveAbs_RightStickX[0].Execute := TRUE;
+			afbMoveAbs_RightStickX[1].Execute := FALSE;
+		ELSIF (afbMoveAbs_RightStickX[0].busy AND NOT afbMoveAbs_RightStickX[1].busy) THEN
+			afbMoveAbs_RightStickX[0].Execute := FALSE;
+			afbMoveAbs_RightStickX[1].Execute := TRUE;
+		ELSE
+			afbMoveAbs_RightStickX[0].Execute := FALSE;
+			afbMoveAbs_RightStickX[1].Execute := FALSE;
+		END_IF 
+	END_IF
+	FOR i:=0 TO 1 DO
+		afbMoveAbs_RightStickX[i](
+			Axis:= fbMoverAxis[4],
+			Position:= lrPosition_RightStickX, 
+			Velocity:= 100, 
+			Acceleration:= 1000, 
+			Deceleration:= 1000, 
+			Jerk:= 1000 * 10
+		);
+	END_FOR
+	
+uiGamePad.RightStickY: //AB free move
+	//Same logic as RightStickX
+	IF afbMoveAbs_RightStickY[0].Error OR afbMoveAbs_RightStickY[1].Error THEN
+		afbMoveAbs_RightStickY[0].Execute := FALSE;
+		afbMoveAbs_RightStickY[1].Execute := FALSE;
+	END_IF
+
+	lrLimitFreeMove_AB := F_CalculateLimitAB(KindMover:= uiKindMover.AMP4330, z:= stActPos.z);
+	lrTempPosition_RightStickY := lrPosition_RightStickY;
+	lrPosition_RightStickY := F_ApplyDeadZone(lrValue:= UINT_TO_LREAL(stGamePad.RightStickY),
+											 lrDeadzone:= lrStickDeadzone, 
+											 lrMaxValue:= UINT_TO_LREAL(cuiLimitStick)) * lrLimitFreeMove_AB;
+	IF lrTempPosition_RightStickY <> lrPosition_RightStickY THEN
+		IF (NOT afbMoveAbs_RightStickY[0].busy AND NOT afbMoveAbs_RightStickY[1].busy) 
+		OR (NOT afbMoveAbs_RightStickY[0].busy AND afbMoveAbs_RightStickY[1].busy) THEN
+			afbMoveAbs_RightStickY[0].Execute := TRUE;
+			afbMoveAbs_RightStickY[1].Execute := FALSE;
+		ELSIF (afbMoveAbs_RightStickY[0].busy AND NOT afbMoveAbs_RightStickY[1].busy) THEN
+			afbMoveAbs_RightStickY[0].Execute := FALSE;
+			afbMoveAbs_RightStickY[1].Execute := TRUE;
+		ELSE
+			afbMoveAbs_RightStickY[0].Execute := FALSE;
+			afbMoveAbs_RightStickY[1].Execute := FALSE;
+		END_IF 
+	END_IF
+	FOR i:=0 TO 1 DO
+		afbMoveAbs_RightStickY[i](
+			Axis:= fbMoverAxis[4],
+			Position:= lrPosition_RightStickY, 
+			Velocity:= 100, 
+			Acceleration:= 1000, 
+			Deceleration:= 1000, 
+			Jerk:= 1000 * 10
+		);
+	END_FOR
+	
+uiGamePad.ButtonA: //A mover up to z direction
+IF abToggle[uiGamePad.ButtonA] AND NOT abBusy[uiGamePad.ButtonA] THEN
+	IF stActPos.z < 3 THEN
+		lrPosition_ButtonA := 3.0;
+	ELSE
+		lrPosition_ButtonA := 5.0;
+	END_IF
+	stCondition_ButtonA.SetValuesVADJ(
+		V:= 200, A:= 2000, 
+		D:= 2000, J:= 2000
+	);
+	fbMover.MoveZ(
+		commandFeedback:= afbFeedback[uiGamePad.ButtonA], 
+		targetPosition:= lrPosition_ButtonA, 
+		constraint:= stCondition_ButtonA
+	);
+	abBusy[uiGamePad.ButtonA] := TRUE;
+ELSE
+	IF NOT afbFeedback[uiGamePad.ButtonA].Active THEN
+		abBusy[uiGamePad.ButtonA] := FALSE;
+		abToggle[uiGamePad.ButtonA] := FALSE;
+	END_IF
+END_IF
+
+uiGamePad.ButtonB:
+	//Reserve
+
+uiGamePad.ButtonX:
+	//Reserve
+	
+uiGamePad.ButtonY:
+	//Reserve
+	 
+uiGamePad.ButtonLR:
+	//Cant move until moving XY
+	IF stStatus = uiStatus_XPGamePad.MovingDpad OR stStatus = uiStatus_XPGamePad.CantRotationC THEN
+		abToggle[uiGamePad.ButtonLR] := FALSE;
+		RETURN;
+	END_IF
+	
+	IF abToggle[uiGamePad.ButtonLR] AND NOT abBusy[uiGamePad.ButtonLR] THEN
+		IF abToggle[uiGamePad.ButtonL1] THEN
+			lrPosition_ButtonLR := stActPos.c - 90;
+		ELSIF abToggle[uiGamePad.ButtonR1] THEN
+			lrPosition_ButtonLR := stActPos.c + 90;
+		ELSIF abToggle[uiGamePad.ButtonL2] THEN
+			lrPosition_ButtonLR := stActPos.c - 360;
+		ELSIF abToggle[uiGamePad.ButtonR2] THEN
+			lrPosition_ButtonLR := stActPos.c + 360;
+		END_IF
+		stCondition_ButtonLR.SetValuesVADJ(
+			V:= 200, A:= 2000, 
+			D:= 2000, J:= 2000
+		);
+		fbMover.MoveC(
+			commandFeedback:= afbFeedback[uiGamePad.ButtonLR], 
+			targetPosition:= lrPosition_ButtonLR, 
+			constraint:= stCondition_ButtonLR, 
+			options:= 0
+		);
+		abBusy[uiGamePad.ButtonLR] := TRUE;
+	ELSE
+		IF NOT afbFeedback[uiGamePad.ButtonLR].Active THEN
+			abBusy[uiGamePad.ButtonLR] := FALSE;
+			abToggle[uiGamePad.ButtonL1] := FALSE;
+			abToggle[uiGamePad.ButtonR1] := FALSE;
+			abToggle[uiGamePad.ButtonL2] := FALSE;
+			abToggle[uiGamePad.ButtonR2] := FALSE;
+			abToggle[uiGamePad.ButtonLR] := FALSE;
+		END_IF
+	END_IF
+
+
+uiGamePad.TriggerL2:
+	//Reserve
+	
+uiGamePad.TriggerR2:
+	//Reserve
+	
+uiGamePad.ButtonStart:
+	//Power Control XPlanar
+	IF abToggle[uiGamePad.ButtonStart] AND bPowered THEN
+		fbMover.Disable(commandFeedback:= afbFeedback[uiGamePad.ButtonStart]);
+		IF fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Disabled THEN
+			abToggle[uiGamePad.ButtonStart] := FALSE;
+			bPowered := FALSE;
+			abToggle[uiGamePad.ButtonStart] := FALSE;
+			stStatus := uiStatus_XPGamePad.Disable;
+		END_IF
+	ELSIF abToggle[uiGamePad.ButtonStart] AND NOT bPowered THEN
+		fbMover.Enable(commandFeedback:= afbFeedback[uiGamePad.ButtonStart]);
+		IF fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Enabled THEN
+			abToggle[uiGamePad.ButtonStart] := FALSE;
+			bPowered := TRUE;
+			abToggle[uiGamePad.ButtonStart] := FALSE;
+		END_IF
+	END_IF
+	//Power control ExternalSetpoint Axis
+	IF bPowered THEN
+		FOR i:=1 TO cuiMoverAxisSize DO
+			afbPower[i].Enable := TRUE;
+			afbPower[i].Enable_Negative := TRUE;
+			afbPower[i].Enable_Positive := TRUE;
+			afbPower[i](Axis:=fbMoverAxis[i]);
+		END_FOR
+	ELSE
+		FOR i:=1 TO cuiMoverAxisSize DO
+			afbPower[i].Enable := FALSE;
+			afbPower[i].Enable_Negative := TRUE;
+			afbPower[i].Enable_Positive := TRUE;
+			afbPower[i](Axis:=fbMoverAxis[i]);
+		END_FOR
+	END_IF
+
+uiGamePad.ButtonSelect:
+	IF abToggle[uiGamePad.ButtonSelect] AND NOT abBusy[uiGamePad.ButtonSelect] THEN
+		fbMover.Reset(commandFeedback:= afbFeedback[uiGamePad.ButtonSelect]);
+		abBusy[uiGamePad.ButtonSelect] := TRUE;
+	ELSE
+		IF NOT afbFeedback[uiGamePad.ButtonSelect].Active THEN
+			abBusy[uiGamePad.ButtonSelect] := FALSE;
+			abToggle[uiGamePad.ButtonSelect] := FALSE;
+		END_IF
+	END_IF
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="externalsetpoint" Id="{707025e5-e543-4333-9a26-405e4c5c21e0}">
+      <Declaration><![CDATA[METHOD PRIVATE externalsetpoint : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[stSetpoint_Pos.x := fbMoverAxis[1].NcToPlc.ActPos;
+stSetpoint_Pos.y := fbMoverAxis[2].NcToPlc.ActPos;
+stSetpoint_Pos.z := fbMoverAxis[3].NcToPlc.ActPos;
+stSetpoint_Pos.a := fbMoverAxis[4].NcToPlc.ActPos;
+stSetpoint_Pos.b := fbMoverAxis[5].NcToPlc.ActPos;
+stSetpoint_Pos.c := fbMoverAxis[6].NcToPlc.ActPos;
+
+stSetpoint_Vel.x := fbMoverAxis[1].NcToPlc.ActVelo;
+stSetpoint_Vel.y := fbMoverAxis[2].NcToPlc.ActVelo;
+stSetpoint_Vel.z := fbMoverAxis[3].NcToPlc.ActVelo;
+stSetpoint_Vel.a := fbMoverAxis[4].NcToPlc.ActVelo;
+stSetpoint_Vel.b := fbMoverAxis[5].NcToPlc.ActVelo;
+stSetpoint_Vel.c := fbMoverAxis[6].NcToPlc.ActVelo;
+
+stSetpoint_Acc.x := fbMoverAxis[1].NcToPlc.ActAcc;
+stSetpoint_Acc.y := fbMoverAxis[2].NcToPlc.ActAcc;
+stSetpoint_Acc.z := fbMoverAxis[3].NcToPlc.ActAcc;
+stSetpoint_Acc.a := fbMoverAxis[4].NcToPlc.ActAcc;
+stSetpoint_Acc.b := fbMoverAxis[5].NcToPlc.ActAcc;
+stSetpoint_Acc.c := fbMoverAxis[6].NcToPlc.ActAcc;
+	
+IF bPowered AND fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Enabled THEN
+	fbMover.SetExternalSetpoint(
+		setPosition:= stSetpoint_Pos, 
+		setVelocity:= stSetpoint_Vel, 
+		setAcceleration:= stSetpoint_Acc);
+	stESGOptions.mode := MC_EXTERNAL_SET_POSITION_MODE.Relative;
+	fbMover.StartExternalSetpointGeneration(commandFeedback:= 0, options:= stESGOptions);
+ELSE
+	fbMover.StopExternalSetpointGeneration(commandFeedback:= 0);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
