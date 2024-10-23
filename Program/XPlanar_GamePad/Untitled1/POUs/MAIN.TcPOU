@@ -21,9 +21,9 @@ fbXPlanarGamePad(
 	XPlanarGamePadCondition := stXPlanarGamePadCondition,
 	KindMover:= uiKindMover.AMP4330, 
 	lrStickDeadZone:= 10000,
-	lrMinLimitPosX := 240, 
+	lrMinLimitPosX := 0, 
 	lrMaxLimitPosX:= 720,
- 	lrMinLimitPosY := 120,
+ 	lrMinLimitPosY := 0,
 	lrMaxLimitPosY:= 480, 
 	stStatus=> );]]></ST>
     </Implementation>
