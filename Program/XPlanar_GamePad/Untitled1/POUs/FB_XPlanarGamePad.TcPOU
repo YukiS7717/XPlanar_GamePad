@@ -8,7 +8,10 @@ VAR_IN_OUT
 END_VAR
 VAR_INPUT
 	stGamePad						: ST_GamePad;
+	KindMover						: uiKindMover;
 	lrStickDeadZone					: LREAL;
+	lrLimitPosX						: LREAL;
+	lrLimitPosY						: LREAL;
 END_VAR
 VAR_OUTPUT
 	stStatus						: uiStatus_XPGamePad;
@@ -24,10 +27,15 @@ VAR //command
 	//General
 	uiCommand						: UINT; //command method
 	stActPos						: MoverVector;
-	lrLimitFreeMove_XY				: LREAL := 43;
+	lrGainFreeMove_XY				: LREAL := 0.1;
 	lrLimitFreeMove_AB				: LREAL := 1;
+	stBasePos						: MoverVector;
+	alrSetLimitPosMax				: ARRAY [0..1] OF LREAL;
+	alrSetLimitPosMin				: ARRAY [0..1] OF LREAL;
+	lrLimitBuffer					: LREAL := 5; 
 	//Dpad
 	stPosition_Dpad					: PositionXYC;
+	stSetPos_Dpad					: MoverVector;
 	stCondition_Dpad				: DynamicConstraint_PathXY;
 	//LeftStickX
 	afbMoveAbs_LeftStickX			: ARRAY [0..1] OF MC_MoveAbsolute;
@@ -73,6 +81,12 @@ VAR CONSTANT
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[stActPos := fbMover.MCTOPLC.ACT.ActPos;
+//動作限界の決定
+alrSetLimitPosMax[0] := setlimitPosition(lrLimitPosition:= lrLimitPosX, KindMover:= KindMover) -lrLimitBuffer;
+alrSetLimitPosMax[1] := setlimitPosition(lrLimitPosition:= lrLimitPosY, KindMover:= KindMover) -lrLimitBuffer;
+alrSetLimitPosMin[0] := -setlimitPosition(lrLimitPosition:= 0, KindMover:= KindMover) +lrLimitBuffer;
+alrSetLimitPosMin[1] := -setlimitPosition(lrLimitPosition:= 0, KindMover:= KindMover) +lrLimitBuffer;
+
 
 checkgamepad();
 externalsetpoint();
@@ -98,7 +112,7 @@ END_IF
 uiCommand := uiGamePad.ButtonSelect;
 command();
 checkstatus();
-IF fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Error THEN
+IF THIS^.fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Error THEN
 	RETURN;
 END_IF
 
@@ -111,33 +125,21 @@ END_IF
 uiCommand := uiGamePad.ButtonStart;
 command();
 checkstatus();
-IF NOT fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Enabled THEN
+IF NOT THIS^.fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Enabled THEN
 	RETURN;
 END_IF
 
 //Virtual Axis PowerControll
 //Pad
 afbR_Trig[uiGamePad.DPadDown](CLK:= stGamePad.DPadDown, Q=> );
-IF afbR_Trig[uiGamePad.DPadDown].Q THEN
-	abToggle[uiGamePad.DPadDown] := NOT abToggle[uiGamePad.DPadDown];
-END_IF
 afbR_Trig[uiGamePad.DPadLeft](CLK:= stGamePad.DPadLeft, Q=> );
-IF afbR_Trig[uiGamePad.DPadLeft].Q THEN
-	abToggle[uiGamePad.DPadLeft] := NOT abToggle[uiGamePad.DPadLeft];
-END_IF
 afbR_Trig[uiGamePad.DPadRight](CLK:= stGamePad.DPadRight, Q=> );
-IF afbR_Trig[uiGamePad.DPadRight].Q THEN
-	abToggle[uiGamePad.DPadRight] := NOT abToggle[uiGamePad.DPadRight];
-END_IF
 afbR_Trig[uiGamePad.DPadUp](CLK:= stGamePad.DPadUp, Q=> );
-IF afbR_Trig[uiGamePad.DPadUp].Q THEN
-	abToggle[uiGamePad.DPadUp] := NOT abToggle[uiGamePad.DPadUp];
-END_IF
-IF afbR_Trig[uiGamePad.DPadUp].Q 
-OR afbR_Trig[uiGamePad.DPadDown].Q 
+IF afbR_Trig[uiGamePad.DPadUp].Q
+OR afbR_Trig[uiGamePad.DPadDown].Q
 OR afbR_Trig[uiGamePad.DPadLeft].Q 
 OR afbR_Trig[uiGamePad.DPadRight].Q THEN
-	abToggle[uiGamePad.Dpad] := NOT abToggle[uiGamePad.Dpad];
+	abToggle[uiGamePad.Dpad] := TRUE;
 END_IF
 uiCommand := uiGamePad.Dpad;
 command();
@@ -255,8 +257,8 @@ VAR_INPUT
 END_VAR
 VAR
 	i								: UINT;
-	stSetPos_Dpad					: MoverVector;
 	stCondition_: INT;
+	lrValue_Stick : LREAL;
 END_VAR
 ]]></Declaration>
       <Implementation>
@@ -271,17 +273,18 @@ uiGamePad.Dpad: //Move the position that a Mover can rotate C
 	IF abToggle[uiGamePad.Dpad] AND NOT abBusy[uiGamePad.Dpad] THEN
 		//The set position to move
 		//The set position dont be set opposite direction
-		stSetPos_Dpad.c := stActPos.c;
-		IF abToggle[uiGamePad.DPadRight] THEN
-			stSetPos_Dpad.x := stSetPos_Dpad.x + 120;
-		ELSIF abToggle[uiGamePad.DPadLeft] THEN
-			stSetPos_Dpad.x := stSetPos_Dpad.x - 120;
+		IF afbR_Trig[uiGamePad.DPadRight].Q THEN
+			stBasePos.x := stBasePos.x + 120;
+		ELSIF afbR_Trig[uiGamePad.DPadLeft].Q THEN
+			stBasePos.x := stBasePos.x - 120;
 		END_IF
-		IF abToggle[uiGamePad.DPadUp] THEN
-			stSetPos_Dpad.y := stSetPos_Dpad.y + 120;
-		ELSIF abToggle[uiGamePad.DPadDown] THEN
-			stSetPos_Dpad.y := stSetPos_Dpad.y - 120;
+		IF afbR_Trig[uiGamePad.DPadUp].Q THEN
+			stBasePos.y := stBasePos.y + 120;
+		ELSIF afbR_Trig[uiGamePad.DPadDown].Q THEN
+			stBasePos.y := stBasePos.y - 120;
 		END_IF
+		stSetPos_Dpad.x := stBasePos.x;
+		stSetPos_Dpad.y := stBasePos.y;
 		//Set Position and move condition
 		stPosition_Dpad.SetValuesXYC(
 			x:= stSetPos_Dpad.x, y:= stSetPos_Dpad.y, c:= stSetPos_Dpad.c
@@ -313,22 +316,25 @@ uiGamePad.Dpad: //Move the position that a Mover can rotate C
 		
 uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
 	IF stStatus = uiStatus_XPGamePad.RotationC THEN
-		abToggle[uiGamePad.Dpad] := FALSE;
 		RETURN;
 	END_IF
-	//If MC_MoveAbsolute have error state, Execute need refresh. 
-	IF afbMoveAbs_LeftStickX[0].Error OR afbMoveAbs_LeftStickX[1].Error THEN
-		afbMoveAbs_LeftStickX[0].Execute := FALSE;
-		afbMoveAbs_LeftStickX[1].Execute := FALSE;
-	END_IF
-
 	//Record a previous set position
 	lrTempPosition_LeftStickX := lrPosition_LeftStickX;
-	//Set a position is to avoid falling off around C Rotation
 	//Calculate to correct Lstick
-	lrPosition_LeftStickX := F_ApplyDeadZone(lrValue:= UINT_TO_LREAL(stGamePad.LeftStickX),
-											 lrDeadzone:= lrStickDeadzone, 
-											 lrMaxValue:= UINT_TO_LREAL(cuiLimitStick)) * lrLimitFreeMove_XY;
+	lrValue_Stick := F_ApplyDeadZone
+					(
+						lrValue:= TO_LREAL(stGamePad.LeftStickX),
+						lrDeadzone:= lrStickDeadzone, 
+						lrMaxValue:= TO_LREAL(cuiLimitStick)
+					);
+	lrPosition_LeftStickX := lrGainFreeMove_XY * lrValue_Stick;
+	IF lrPosition_LeftStickX + stBasePos.x > alrSetLimitPosMax[0] THEN
+		//最大エリア範囲外
+		lrPosition_LeftStickX := alrSetLimitPosMax[0] - stBasePos.x;
+	ELSIF lrPosition_LeftStickX + stBasePos.x < alrSetLimitPosMin[0] THEN
+		//最小エリア範囲外
+		lrPosition_LeftStickX := alrSetLimitPosMin[0] - stBasePos.x;
+	END_IF
 	//Alternate orders to MC_MoveAbsolute
 	IF lrTempPosition_LeftStickX <> lrPosition_LeftStickX THEN
 		IF (NOT afbMoveAbs_LeftStickX[0].busy AND NOT afbMoveAbs_LeftStickX[1].busy) 
@@ -338,13 +344,11 @@ uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
 		ELSIF (afbMoveAbs_LeftStickX[0].busy AND NOT afbMoveAbs_LeftStickX[1].busy) THEN
 			afbMoveAbs_LeftStickX[0].Execute := FALSE;
 			afbMoveAbs_LeftStickX[1].Execute := TRUE;
-		ELSE
-			afbMoveAbs_LeftStickX[0].Execute := FALSE;
-			afbMoveAbs_LeftStickX[1].Execute := FALSE;
 		END_IF 
 	END_IF
 	FOR i:=0 TO 1 DO
-		afbMoveAbs_LeftStickX[i](
+		afbMoveAbs_LeftStickX[i]
+		(
 			Axis:= fbMoverAxis[1],
 			Position:= lrPosition_LeftStickX, 
 			Velocity:= 100, 
@@ -352,20 +356,29 @@ uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
 			Deceleration:= 1000, 
 			Jerk:= 1000 * 10
 		);
+		afbMoveAbs_LeftStickX[i].Execute := FALSE;
 	END_FOR
 
 uiGamePad.LeftStickY: //A mover move in the Y direction with externalsetpoint
-	//Same logic as LeftStickX
-	IF afbMoveAbs_LeftStickY[0].Error OR afbMoveAbs_LeftStickY[1].Error THEN
-		afbMoveAbs_LeftStickY[0].Execute := FALSE;
-		afbMoveAbs_LeftStickY[1].Execute := FALSE;
+	IF stStatus = uiStatus_XPGamePad.RotationC THEN
+		RETURN;
 	END_IF
-
+	//Same logic as LeftStickX
 	lrTempPosition_LeftStickY := lrPosition_LeftStickY;
-	lrPosition_LeftStickY := lrLimitFreeMove_XY * F_ApplyDeadZone(
-								lrValue:= UINT_TO_LREAL(stGamePad.LeftStickY),
-								lrDeadzone:= lrStickDeadzone, 
-								lrMaxValue:= UINT_TO_LREAL(cuiLimitStick));
+	lrValue_Stick := F_ApplyDeadZone
+					(
+						lrValue:= TO_LREAL(stGamePad.LeftStickY),
+						lrDeadzone:= lrStickDeadzone, 
+						lrMaxValue:= TO_LREAL(cuiLimitStick)
+					);
+	lrPosition_LeftStickY := lrGainFreeMove_XY * lrValue_Stick; 
+	IF lrPosition_LeftStickY + stBasePos.y > alrSetLimitPosMax[1] THEN
+		//最大エリア範囲外
+		lrPosition_LeftStickY := alrSetLimitPosMax[1] - stBasePos.y;
+	ELSIF lrPosition_LeftStickY + stBasePos.y < alrSetLimitPosMin[1] THEN
+		//最小エリア範囲外
+		lrPosition_LeftStickY := alrSetLimitPosMin[1] - stBasePos.y;
+	END_IF
 	IF lrTempPosition_LeftStickY <> lrPosition_LeftStickY THEN
 		IF (NOT afbMoveAbs_LeftStickY[0].busy AND NOT afbMoveAbs_LeftStickY[1].busy) 
 		OR (NOT afbMoveAbs_LeftStickY[0].busy AND afbMoveAbs_LeftStickY[1].busy) THEN
@@ -374,13 +387,11 @@ uiGamePad.LeftStickY: //A mover move in the Y direction with externalsetpoint
 		ELSIF (afbMoveAbs_LeftStickY[0].busy AND NOT afbMoveAbs_LeftStickY[1].busy) THEN
 			afbMoveAbs_LeftStickY[0].Execute := FALSE;
 			afbMoveAbs_LeftStickY[1].Execute := TRUE;
-		ELSE
-			afbMoveAbs_LeftStickY[0].Execute := FALSE;
-			afbMoveAbs_LeftStickY[1].Execute := FALSE;
 		END_IF 
 	END_IF
 	FOR i:=0 TO 1 DO
-		afbMoveAbs_LeftStickY[i](
+		afbMoveAbs_LeftStickY[i]
+		(
 			Axis:= fbMoverAxis[2],
 			Position:= lrPosition_LeftStickY, 
 			Velocity:= 100, 
@@ -388,21 +399,21 @@ uiGamePad.LeftStickY: //A mover move in the Y direction with externalsetpoint
 			Deceleration:= 1000, 
 			Jerk:= 1000 * 10
 		);
+		afbMoveAbs_LeftStickY[i].Execute := FALSE;
 	END_FOR
 
 uiGamePad.RightStickX: //AB free move
 	//Same Logic as LStick
-	IF afbMoveAbs_RightStickX[0].Error OR afbMoveAbs_RightStickX[1].Error THEN
-		afbMoveAbs_RightStickX[0].Execute := FALSE;
-		afbMoveAbs_RightStickX[1].Execute := FALSE;
-	END_IF
-
 	//Calculate the values of the limit according to Z value.
-	lrLimitFreeMove_AB := F_CalculateLimitAB(KindMover:= uiKindMover.AMP4330, z:= stActPos.z);
+	lrLimitFreeMove_AB := F_CalculateLimitAB(KindMover:= KindMover, z:= stActPos.z);
 	lrTempPosition_RightStickX := lrPosition_RightStickX;
-	lrPosition_RightStickX := F_ApplyDeadZone(lrValue:= UINT_TO_LREAL(stGamePad.RightStickX),
-											 lrDeadzone:= lrStickDeadzone, 
-											 lrMaxValue:= UINT_TO_LREAL(cuiLimitStick)) * lrLimitFreeMove_AB;
+	lrValue_Stick := F_ApplyDeadZone
+					(
+						lrValue:= TO_LREAL(stGamePad.RightStickX),
+						lrDeadzone:= lrStickDeadzone, 
+						lrMaxValue:= TO_LREAL(cuiLimitStick)
+					);
+	lrPosition_RightStickX := lrLimitFreeMove_AB * (lrValue_Stick / UINT_TO_LREAL(cuiLimitStick));
 	IF lrTempPosition_RightStickX <> lrPosition_RightStickX THEN
 		IF (NOT afbMoveAbs_RightStickX[0].busy AND NOT afbMoveAbs_RightStickX[1].busy) 
 		OR (NOT afbMoveAbs_RightStickX[0].busy AND afbMoveAbs_RightStickX[1].busy) THEN
@@ -411,13 +422,11 @@ uiGamePad.RightStickX: //AB free move
 		ELSIF (afbMoveAbs_RightStickX[0].busy AND NOT afbMoveAbs_RightStickX[1].busy) THEN
 			afbMoveAbs_RightStickX[0].Execute := FALSE;
 			afbMoveAbs_RightStickX[1].Execute := TRUE;
-		ELSE
-			afbMoveAbs_RightStickX[0].Execute := FALSE;
-			afbMoveAbs_RightStickX[1].Execute := FALSE;
 		END_IF 
 	END_IF
 	FOR i:=0 TO 1 DO
-		afbMoveAbs_RightStickX[i](
+		afbMoveAbs_RightStickX[i]
+		(
 			Axis:= fbMoverAxis[4],
 			Position:= lrPosition_RightStickX, 
 			Velocity:= 100, 
@@ -425,20 +434,21 @@ uiGamePad.RightStickX: //AB free move
 			Deceleration:= 1000, 
 			Jerk:= 1000 * 10
 		);
+		afbMoveAbs_RightStickX[i].Execute := FALSE;
 	END_FOR
 	
 uiGamePad.RightStickY: //AB free move
 	//Same logic as RightStickX
-	IF afbMoveAbs_RightStickY[0].Error OR afbMoveAbs_RightStickY[1].Error THEN
-		afbMoveAbs_RightStickY[0].Execute := FALSE;
-		afbMoveAbs_RightStickY[1].Execute := FALSE;
-	END_IF
 
-	lrLimitFreeMove_AB := F_CalculateLimitAB(KindMover:= uiKindMover.AMP4330, z:= stActPos.z);
+	lrLimitFreeMove_AB := F_CalculateLimitAB(KindMover:= KindMover, z:= stActPos.z);
 	lrTempPosition_RightStickY := lrPosition_RightStickY;
-	lrPosition_RightStickY := F_ApplyDeadZone(lrValue:= UINT_TO_LREAL(stGamePad.RightStickY),
-											 lrDeadzone:= lrStickDeadzone, 
-											 lrMaxValue:= UINT_TO_LREAL(cuiLimitStick)) * lrLimitFreeMove_AB;
+	lrValue_Stick := F_ApplyDeadZone
+					(
+						lrValue:= TO_LREAL(stGamePad.RightStickY),
+						lrDeadzone:= lrStickDeadzone, 
+						lrMaxValue:= TO_LREAL(cuiLimitStick)
+					);
+	lrPosition_RightStickY := lrLimitFreeMove_AB * (lrValue_Stick / UINT_TO_LREAL(cuiLimitStick));
 	IF lrTempPosition_RightStickY <> lrPosition_RightStickY THEN
 		IF (NOT afbMoveAbs_RightStickY[0].busy AND NOT afbMoveAbs_RightStickY[1].busy) 
 		OR (NOT afbMoveAbs_RightStickY[0].busy AND afbMoveAbs_RightStickY[1].busy) THEN
@@ -447,26 +457,25 @@ uiGamePad.RightStickY: //AB free move
 		ELSIF (afbMoveAbs_RightStickY[0].busy AND NOT afbMoveAbs_RightStickY[1].busy) THEN
 			afbMoveAbs_RightStickY[0].Execute := FALSE;
 			afbMoveAbs_RightStickY[1].Execute := TRUE;
-		ELSE
-			afbMoveAbs_RightStickY[0].Execute := FALSE;
-			afbMoveAbs_RightStickY[1].Execute := FALSE;
 		END_IF 
 	END_IF
 	FOR i:=0 TO 1 DO
-		afbMoveAbs_RightStickY[i](
-			Axis:= fbMoverAxis[4],
+		afbMoveAbs_RightStickY[i]
+		(
+			Axis:= fbMoverAxis[5],
 			Position:= lrPosition_RightStickY, 
 			Velocity:= 100, 
 			Acceleration:= 1000, 
 			Deceleration:= 1000, 
 			Jerk:= 1000 * 10
 		);
+		afbMoveAbs_RightStickY[i].Execute := FALSE;
 	END_FOR
 	
 uiGamePad.ButtonA: //A mover up to z direction
 IF abToggle[uiGamePad.ButtonA] AND NOT abBusy[uiGamePad.ButtonA] THEN
-	IF stActPos.z < 3 THEN
-		lrPosition_ButtonA := 3.0;
+	IF stActPos.z > 3 THEN
+		lrPosition_ButtonA := 2.0;
 	ELSE
 		lrPosition_ButtonA := 5.0;
 	END_IF
@@ -505,14 +514,15 @@ uiGamePad.ButtonLR:
 	
 	IF abToggle[uiGamePad.ButtonLR] AND NOT abBusy[uiGamePad.ButtonLR] THEN
 		IF abToggle[uiGamePad.ButtonL1] THEN
-			lrPosition_ButtonLR := stActPos.c - 90;
+			stBasePos.c := stBasePos.c - 90;
 		ELSIF abToggle[uiGamePad.ButtonR1] THEN
-			lrPosition_ButtonLR := stActPos.c + 90;
+			stBasePos.c := stBasePos.c + 90;
 		ELSIF abToggle[uiGamePad.ButtonL2] THEN
-			lrPosition_ButtonLR := stActPos.c - 360;
+			stBasePos.c := stBasePos.c - 360;
 		ELSIF abToggle[uiGamePad.ButtonR2] THEN
-			lrPosition_ButtonLR := stActPos.c + 360;
+			stBasePos.c := stBasePos.c + 360;
 		END_IF
+		lrPosition_ButtonLR := stBasePos.c;
 		stCondition_ButtonLR.SetValuesVADJ(
 			V:= 200, A:= 2000, 
 			D:= 2000, J:= 2000
@@ -627,6 +637,29 @@ IF bPowered AND fbMover.MCTOPLC.STD.State = MC_PLANAR_STATE.Enabled THEN
 ELSE
 	fbMover.StopExternalSetpointGeneration(commandFeedback:= 0);
 END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="setlimitPosition" Id="{02d20284-81bc-4ddc-8c5f-603f4de60f5b}">
+      <Declaration><![CDATA[METHOD PRIVATE setlimitPosition : LREAL
+VAR_INPUT
+	lrLimitPosition					: LREAL;
+	KindMover						: uiKindMover;
+END_VAR
+VAR
+	lrMoverSize				: LREAL;
+	stMoverSize				: ST_MoverSize;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF KindMover = uiKindMover.AMP4220 THEN
+	lrMoverSize := stMoverSize.AMP4220;
+ELSIF KindMover = uiKindMover.AMP4550 THEN
+	lrMoverSize := stMoverSize.AMP4550;
+ELSE
+	lrMoverSize := stMoverSize.AMP4330;
+END_IF
+
+setlimitPosition := lrLimitPosition - lrMoverSize/2;]]></ST>
       </Implementation>
     </Method>
   </POU>

@@ -13,9 +13,12 @@ END_VAR
 
 fbXPlanarGamePad(
 	fbMover:= fbMover, 
-	fbMoverAxis:= afbAxis, 
-	stGamePad:= GVL.stGamePad1, 
-	lrStickDeadZone:= 3000, 
+	fbMoverAxis:= afbAxis,  
+	stGamePad:= GVL.stGamePad1,
+	KindMover:= uiKindMover.AMP4330, 
+	lrStickDeadZone:= 10000, 
+	lrLimitPosX:= 720, 
+	lrLimitPosY:= 480, 
 	stStatus=> );]]></ST>
     </Implementation>
   </POU>

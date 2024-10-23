@@ -20,7 +20,7 @@ ELSE
 	lrMoverSize := stMoverSize.AMP4330;
 END_IF
 
-F_CalculateLimitAB := ASIN(z/lrMoverSize);
+F_CalculateLimitAB := ATAN(z/lrMoverSize) * (180.0/3.14);
 ]]></ST>
     </Implementation>
   </POU>
