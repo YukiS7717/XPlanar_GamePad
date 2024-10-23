@@ -6,9 +6,9 @@
 {attribute 'to_string'}
 TYPE uiKindMover :
 (
-	AMP4330,
-	AMP4220,
-	AMP4550
+	AMP4330 := 00,
+	AMP4220 := 01,
+	AMP4550 := 02
 )UINT;
 END_TYPE
 ]]></Declaration>

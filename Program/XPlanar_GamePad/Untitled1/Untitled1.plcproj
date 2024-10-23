@@ -24,6 +24,9 @@
     <Compile Include="DUTs\ST_MoverSize.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="DUTs\ST_XPlanarGamePadCondition.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="DUTs\uiGamePad.TcDUT">
       <SubType>Code</SubType>
     </Compile>
@@ -39,16 +42,7 @@
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\ControllerMode.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="POUs\FB_XPlanarGamePad.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="POUs\F_ApplyDeadZone.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="POUs\F_CalculateLimitAB.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\MAIN.TcPOU">

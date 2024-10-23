@@ -6,19 +6,25 @@ VAR
 	fbMover							: MC_PlanarMover;
 	afbAxis							: ARRAY [1..6] OF AXIS_REF;
 	fbXPlanarGamePad				: FB_XPlanarGamePad;
+	stXPlanarGamePadCondition		: ST_XPlanarGamePadCondition;
 END_VAR
 ]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbMover.Update();
+stXPlanarGamePadCondition.lrBasePosition_X := 360;
+stXPlanarGamePadCondition.lrBasePosition_Y := 240;
 
 fbXPlanarGamePad(
 	fbMover:= fbMover, 
 	fbMoverAxis:= afbAxis,  
-	stGamePad:= GVL.stGamePad1,
+	GamePad:= GVL.stGamePad1,
+	XPlanarGamePadCondition := stXPlanarGamePadCondition,
 	KindMover:= uiKindMover.AMP4330, 
-	lrStickDeadZone:= 10000, 
-	lrLimitPosX:= 720, 
-	lrLimitPosY:= 480, 
+	lrStickDeadZone:= 10000,
+	lrMinLimitPosX := 240, 
+	lrMaxLimitPosX:= 720,
+ 	lrMinLimitPosY := 120,
+	lrMaxLimitPosY:= 480, 
 	stStatus=> );]]></ST>
     </Implementation>
   </POU>

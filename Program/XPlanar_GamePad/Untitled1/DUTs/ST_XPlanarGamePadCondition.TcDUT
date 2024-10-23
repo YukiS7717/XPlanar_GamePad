@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_XPlanarGamePadCondition" Id="{db1e5ad2-49ee-4cbd-aea4-d31684271952}">
+    <Declaration><![CDATA[TYPE ST_XPlanarGamePadCondition :
+STRUCT
+	lrBasePosition_X				: LREAL := 120;
+	lrBasePosition_Y				: LREAL := 120;
+	lrVelocity_XYZ					: LREAL := 100;
+	lrAcceleration_XYZ				: LREAL := 1000;
+	lrDeceleration_XYZ				: LREAL := 1000;
+	lrJerk_XYZ						: LREAL := 10000;
+	lrVelocity_ABC					: LREAL := 1000;
+	lrAcceleration_ABC				: LREAL := 10000;
+	lrDeceleration_ABC				: LREAL := 10000;
+	lrJerk_ABC						: LREAL := 100000;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
