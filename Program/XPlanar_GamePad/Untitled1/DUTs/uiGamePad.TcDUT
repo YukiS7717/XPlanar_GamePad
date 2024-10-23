@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="uiGamePad" Id="{0fd40560-bc65-4672-a708-358e08d4bb98}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+{attribute 'to_string'}
+TYPE uiGamePad :
+(
+	LeftStickX			:= 000,
+    LeftStickY			:= 001,
+    RightStickX			:= 002,
+    RightStickY			:= 003,
+    ButtonA				:= 004,
+    ButtonB				:= 005,
+    ButtonX				:= 006,
+    ButtonY				:= 007,
+    ButtonL1			:= 008,
+    ButtonR1			:= 009,
+    TriggerL2			:= 010,
+    TriggerR2			:= 011,
+	ButtonL2			:= 012,
+    ButtonR2			:= 013,
+    ButtonL3			:= 014,
+    ButtonR3			:= 015,
+    ButtonStart			:= 016,
+    ButtonSelect		:= 017,
+    DPadUp				:= 018,
+    DPadDown			:= 019,
+    DPadLeft			:= 020,
+    DPadRight			:= 021,
+	Dpad				:= 022,
+	LeftStick			:= 023,
+	RightStick			:= 024,
+	ButtonLR			:= 025
+)UINT;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

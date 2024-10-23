@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="MAIN" Id="{3b2e30a5-fd08-4af5-bac7-164098d87b7b}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	fbMover							: MC_PlanarMover;
+	afbAxis							: ARRAY [1..6] OF AXIS_REF;
+	fbXPlanarGamePad				: FB_XPlanarGamePad;
+	stXPlanarGamePadCondition		: ST_XPlanarGamePadCondition;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbMover.Update();
+stXPlanarGamePadCondition.lrBasePosition_X := 360;
+stXPlanarGamePadCondition.lrBasePosition_Y := 240;
+
+fbXPlanarGamePad(
+	fbMover:= fbMover, 
+	fbMoverAxis:= afbAxis,  
+	GamePad:= GVL.stGamePad1,
+	XPlanarGamePadCondition := stXPlanarGamePadCondition,
+	KindMover:= uiKindMover.AMP4330, 
+	lrStickDeadZone:= 10000,
+	lrMinLimitPosX := 240, 
+	lrMaxLimitPosX:= 720,
+ 	lrMinLimitPosY := 120,
+	lrMaxLimitPosY:= 480, 
+	stStatus=> );]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

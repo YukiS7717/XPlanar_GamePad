@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="uiKindMover" Id="{db9d14c5-9cce-47a7-8d15-e5f603e929a4}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+{attribute 'to_string'}
+TYPE uiKindMover :
+(
+	AMP4330 := 00,
+	AMP4220 := 01,
+	AMP4550 := 02
+)UINT;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

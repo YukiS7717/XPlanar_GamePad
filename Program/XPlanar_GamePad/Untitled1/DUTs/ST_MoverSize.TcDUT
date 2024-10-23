@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_MoverSize" Id="{9b396cd4-5595-43ba-91a8-4372dbd2199d}">
+    <Declaration><![CDATA[TYPE ST_MoverSize :
+STRUCT
+	AMP4220				: LREAL := 113;
+	AMP4330				: LREAL := 155;
+	AMP4550				: LREAL := 235;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
