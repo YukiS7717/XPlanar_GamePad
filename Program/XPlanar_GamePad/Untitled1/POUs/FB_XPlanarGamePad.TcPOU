@@ -331,8 +331,7 @@ END_VAR
 	stStatus := uiStatus_XPGamePad.MovingDpad;
 ELSIF abBusy[uiGamePad.ButtonLR] THEN
 	stStatus := uiStatus_XPGamePad.RotationC;
-ELSIF lrVelocity_LeftStickX <> 0 OR lrTempVelocity_LeftStickX <> 0
-OR lrVelocity_LeftStickY <> 0 OR lrTempVelocity_LeftStickY <> 0 THEN
+ELSIF TO_INT(stBasePos.x) <> TO_INT(stActPos.x) AND TO_INT(stBasePos.y) <> TO_INT(stActPos.y) THEN
 	stStatus := uiStatus_XPGamePad.CantRotationC;
 ELSIF bPowered THEN
 	stStatus := uiStatus_XPGamePad.Ready;
