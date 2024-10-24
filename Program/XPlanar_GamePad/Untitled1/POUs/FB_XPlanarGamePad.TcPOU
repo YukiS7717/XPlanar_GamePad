@@ -523,7 +523,7 @@ uiGamePad.RightStickX: //AB free move
 	FOR i:=0 TO 1 DO
 		afbMoveAbs_RightStickX[i]
 		(
-			Axis:= fbMoverAxis[4],
+			Axis:= fbMoverAxis[5],
 			Position:= lrPosition_RightStickX, 
 			Velocity:= XPlanarGamePadCondition.lrVelocity_ABC, 
 			Acceleration:= XPlanarGamePadCondition.lrAcceleration_ABC, 
@@ -558,8 +558,8 @@ uiGamePad.RightStickY: //AB free move
 	FOR i:=0 TO 1 DO
 		afbMoveAbs_RightStickY[i]
 		(
-			Axis:= fbMoverAxis[5],
-			Position:= lrPosition_RightStickY, 
+			Axis:= fbMoverAxis[4],
+			Position:= -lrPosition_RightStickY, 
 			Velocity:= XPlanarGamePadCondition.lrVelocity_ABC, 
 			Acceleration:= XPlanarGamePadCondition.lrAcceleration_ABC, 
 			Deceleration:= XPlanarGamePadCondition.lrDeceleration_ABC, 
@@ -611,13 +611,13 @@ uiGamePad.ButtonLR:
 	
 	IF abToggle[uiGamePad.ButtonLR] AND NOT abBusy[uiGamePad.ButtonLR] THEN
 		IF abToggle[uiGamePad.ButtonL1] THEN
-			stBasePos.c := stBasePos.c - 90;
-		ELSIF abToggle[uiGamePad.ButtonR1] THEN
 			stBasePos.c := stBasePos.c + 90;
+		ELSIF abToggle[uiGamePad.ButtonR1] THEN
+			stBasePos.c := stBasePos.c - 90;
 		ELSIF abToggle[uiGamePad.ButtonL2] THEN
-			stBasePos.c := stBasePos.c - 360;
-		ELSIF abToggle[uiGamePad.ButtonR2] THEN
 			stBasePos.c := stBasePos.c + 360;
+		ELSIF abToggle[uiGamePad.ButtonR2] THEN
+			stBasePos.c := stBasePos.c - 360;
 		END_IF
 		lrPosition_ButtonLR := stBasePos.c;
 		stCondition_ButtonLR.SetValuesVADJ(
