@@ -11,8 +11,8 @@ END_VAR
 ]]></Declaration>
     <Implementation>
       <ST><![CDATA[fbMover.Update();
-stXPlanarGamePadCondition.lrBasePosition_X := 360;
-stXPlanarGamePadCondition.lrBasePosition_Y := 240;
+stXPlanarGamePadCondition.lrBasePosition_X := 120;
+stXPlanarGamePadCondition.lrBasePosition_Y := 120;
 
 fbXPlanarGamePad(
 	fbMover:= fbMover, 

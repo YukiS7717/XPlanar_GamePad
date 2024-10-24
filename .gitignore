@@ -73,3 +73,5 @@ artifacts/
 
 *.bak
 *~u
+_Boot/
+_ConpileInfo/
