@@ -30,7 +30,6 @@ VAR //command
 	//General
 	uiCommand						: UINT; //command method
 	stActPos						: MoverVector;
-	lrGainFreeMove_XY				: LREAL := 0.1;
 	lrLimitFreeMove_AB				: LREAL := 1;
 	stBasePos						: MoverVector;
 	alrSetLimitPosMax				: ARRAY [0..1] OF LREAL;
@@ -42,12 +41,12 @@ VAR //command
 	stCondition_Dpad				: DynamicConstraint_PathXY;
 	//LeftStickX
 	afbMoveAbs_LeftStickX			: ARRAY [0..1] OF MC_MoveAbsolute;
-	lrPosition_LeftStickX			: LREAL;
-	lrTempPosition_LeftStickX		: LREAL;
+	lrVelocity_LeftStickX			: LREAL;
+	lrTempVelocity_LeftStickX		: LREAL;
 	//LeftStickY
 	afbMoveAbs_LeftStickY			: ARRAY [0..1] OF MC_MoveAbsolute;
-	lrPosition_LeftStickY			: LREAL;
-	lrTempPosition_LeftStickY		: LREAL;
+	lrVelocity_LeftStickY			: LREAL;
+	lrTempVelocity_LeftStickY		: LREAL;
 	//RightStickX
 	afbMoveAbs_RightStickX			: ARRAY [0..1] OF MC_MoveAbsolute;
 	lrPosition_RightStickX			: LREAL;
@@ -332,8 +331,8 @@ END_VAR
 	stStatus := uiStatus_XPGamePad.MovingDpad;
 ELSIF abBusy[uiGamePad.ButtonLR] THEN
 	stStatus := uiStatus_XPGamePad.RotationC;
-ELSIF lrPosition_LeftStickX <> 0 OR lrTempPosition_LeftStickX <> 0
-OR lrPosition_LeftStickY <> 0 OR lrTempPosition_LeftStickY <> 0 THEN
+ELSIF lrVelocity_LeftStickX <> 0 OR lrTempVelocity_LeftStickX <> 0
+OR lrVelocity_LeftStickY <> 0 OR lrTempVelocity_LeftStickY <> 0 THEN
 	stStatus := uiStatus_XPGamePad.CantRotationC;
 ELSIF bPowered THEN
 	stStatus := uiStatus_XPGamePad.Ready;
@@ -350,6 +349,7 @@ VAR
 	i								: UINT;
 	stCondition_: INT;
 	lrValue_Stick : LREAL;
+	lrSetTargetPosition : LREAL;
 END_VAR
 ]]></Declaration>
       <Implementation>
@@ -364,14 +364,14 @@ uiGamePad.Dpad: //Move the position that a Mover can rotate C
 	IF abToggle[uiGamePad.Dpad] AND NOT abBusy[uiGamePad.Dpad] THEN
 		//The set position to move
 		//The set position dont be set opposite direction
-		IF afbR_Trig[uiGamePad.DPadRight].Q THEN
-			stBasePos.x := stBasePos.x + 120;
-		ELSIF afbR_Trig[uiGamePad.DPadLeft].Q THEN
+		IF afbR_Trig[uiGamePad.DPadRight].Q AND alrSetLimitPosMax[0] > stBasePos.x + 120 THEN
+			stBasePos.x := stBasePos.x + 120;	
+		ELSIF afbR_Trig[uiGamePad.DPadLeft].Q AND alrSetLimitPosMin[0] < stBasePos.x - 120 THEN
 			stBasePos.x := stBasePos.x - 120;
 		END_IF
-		IF afbR_Trig[uiGamePad.DPadUp].Q THEN
+		IF afbR_Trig[uiGamePad.DPadUp].Q AND alrSetLimitPosMax[1] > stBasePos.y + 120 THEN
 			stBasePos.y := stBasePos.y + 120;
-		ELSIF afbR_Trig[uiGamePad.DPadDown].Q THEN
+		ELSIF afbR_Trig[uiGamePad.DPadDown].Q AND alrSetLimitPosMin[1] < stBasePos.y - 120 THEN
 			stBasePos.y := stBasePos.y - 120;
 		END_IF
 		stSetPos_Dpad.x := stBasePos.x;
@@ -410,7 +410,7 @@ uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
 		RETURN;
 	END_IF
 	//Record a previous set position
-	lrTempPosition_LeftStickX := lrPosition_LeftStickX;
+	lrTempVelocity_LeftStickX := lrVelocity_LeftStickX;
 	//Calculate to correct Lstick
 	lrValue_Stick := mApplyDeadZone
 					(
@@ -418,16 +418,19 @@ uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
 						lrDeadzone:= lrStickDeadzone, 
 						lrMaxValue:= TO_LREAL(cuiLimitStick)
 					);
-	lrPosition_LeftStickX := lrGainFreeMove_XY * lrValue_Stick;
-	IF lrPosition_LeftStickX + stBasePos.x > alrSetLimitPosMax[0] THEN
-		//最大エリア範囲外
-		lrPosition_LeftStickX := alrSetLimitPosMax[0] - stBasePos.x;
-	ELSIF lrPosition_LeftStickX + stBasePos.x < alrSetLimitPosMin[0] THEN
-		//最小エリア範囲外
-		lrPosition_LeftStickX := alrSetLimitPosMin[0] - stBasePos.x;
+	lrVelocity_LeftStickX := XPlanarGamePadCondition.lrVelocity_XYZ * (lrValue_Stick / TO_LREAL(cuiLimitStick));
+	IF lrVelocity_LeftStickX > 0 THEN
+		//最大エリア範囲を設定
+		lrSetTargetPosition := alrSetLimitPosMax[0] - stBasePos.x;
+	ELSIF lrVelocity_LeftStickX < 0 THEN
+		//最小エリア範囲を設定
+		lrSetTargetPosition := alrSetLimitPosMin[0] - stBasePos.x;
+	ELSE
+		lrSetTargetPosition := 0;
+		lrVelocity_LeftStickX := XPlanarGamePadCondition.lrVelocity_XYZ /2;
 	END_IF
 	//Alternate orders to MC_MoveAbsolute
-	IF lrTempPosition_LeftStickX <> lrPosition_LeftStickX THEN
+	IF lrTempVelocity_LeftStickX <> lrVelocity_LeftStickX THEN
 		IF (NOT afbMoveAbs_LeftStickX[0].busy AND NOT afbMoveAbs_LeftStickX[1].busy) 
 		OR (NOT afbMoveAbs_LeftStickX[0].busy AND afbMoveAbs_LeftStickX[1].busy) THEN
 			afbMoveAbs_LeftStickX[0].Execute := TRUE;
@@ -441,8 +444,8 @@ uiGamePad.LeftStickX: //A mover move in the x direction with externalsetpoint
 		afbMoveAbs_LeftStickX[i]
 		(
 			Axis:= fbMoverAxis[1],
-			Position:= lrPosition_LeftStickX, 
-			Velocity:= XPlanarGamePadCondition.lrVelocity_XYZ, 
+			Position:= lrSetTargetPosition, 
+			Velocity:= ABS(lrVelocity_LeftStickX), 
 			Acceleration:= XPlanarGamePadCondition.lrAcceleration_XYZ, 
 			Deceleration:= XPlanarGamePadCondition.lrDeceleration_XYZ, 
 			Jerk:= XPlanarGamePadCondition.lrJerk_XYZ
@@ -455,22 +458,25 @@ uiGamePad.LeftStickY: //A mover move in the Y direction with externalsetpoint
 		RETURN;
 	END_IF
 	//Same logic as LeftStickX
-	lrTempPosition_LeftStickY := lrPosition_LeftStickY;
+	lrTempVelocity_LeftStickY := lrVelocity_LeftStickY;
 	lrValue_Stick := mApplyDeadZone
 					(
 						lrValue:= TO_LREAL(GamePad.LeftStickY),
 						lrDeadzone:= lrStickDeadzone, 
 						lrMaxValue:= TO_LREAL(cuiLimitStick)
 					);
-	lrPosition_LeftStickY := lrGainFreeMove_XY * lrValue_Stick; 
-	IF lrPosition_LeftStickY + stBasePos.y > alrSetLimitPosMax[1] THEN
-		//最大エリア範囲外
-		lrPosition_LeftStickY := alrSetLimitPosMax[1] - stBasePos.y;
-	ELSIF lrPosition_LeftStickY + stBasePos.y < alrSetLimitPosMin[1] THEN
-		//最小エリア範囲外
-		lrPosition_LeftStickY := alrSetLimitPosMin[1] - stBasePos.y;
+	lrVelocity_LeftStickY := XPlanarGamePadCondition.lrVelocity_XYZ * (lrValue_Stick / TO_LREAL(cuiLimitStick)); 
+	IF lrVelocity_LeftStickY > 0 THEN
+		//最大エリア範囲を設定
+		lrSetTargetPosition := alrSetLimitPosMax[1] - stBasePos.y;
+	ELSIF lrVelocity_LeftStickY < 0 THEN
+		//最小エリア範囲を設定
+		lrSetTargetPosition := alrSetLimitPosMin[1] - stBasePos.y;
+	ELSE
+		lrSetTargetPosition := 0;
+		lrVelocity_LeftStickY := XPlanarGamePadCondition.lrVelocity_XYZ /2;
 	END_IF
-	IF lrTempPosition_LeftStickY <> lrPosition_LeftStickY THEN
+	IF lrTempVelocity_LeftStickY <> lrVelocity_LeftStickY THEN
 		IF (NOT afbMoveAbs_LeftStickY[0].busy AND NOT afbMoveAbs_LeftStickY[1].busy) 
 		OR (NOT afbMoveAbs_LeftStickY[0].busy AND afbMoveAbs_LeftStickY[1].busy) THEN
 			afbMoveAbs_LeftStickY[0].Execute := TRUE;
@@ -484,8 +490,8 @@ uiGamePad.LeftStickY: //A mover move in the Y direction with externalsetpoint
 		afbMoveAbs_LeftStickY[i]
 		(
 			Axis:= fbMoverAxis[2],
-			Position:= lrPosition_LeftStickY, 
-			Velocity:= XPlanarGamePadCondition.lrVelocity_XYZ, 
+			Position:= lrSetTargetPosition, 
+			Velocity:= ABS(lrVelocity_LeftStickY), 
 			Acceleration:= XPlanarGamePadCondition.lrAcceleration_XYZ, 
 			Deceleration:= XPlanarGamePadCondition.lrDeceleration_XYZ, 
 			Jerk:= XPlanarGamePadCondition.lrJerk_XYZ
