@@ -12,7 +12,13 @@ XPlanarをゲームパッドで動作を行うためのFBです。
   - AB方向に傾ける。離すと水平に戻る。
 - Aボタン
   - 上下移動 2から5
+- Yボタン
+  - TwinCAT Restart
 - L1,R1
   - 90度回転
 - L2,R2
   - 360度回転
+
+## GamePad入力ソフト
+
+https://github.com/YukiS7717/GamePad_TC3

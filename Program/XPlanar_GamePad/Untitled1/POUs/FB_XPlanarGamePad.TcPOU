@@ -3,27 +3,27 @@
   <POU Name="FB_XPlanarGamePad" Id="{d9dfe6f5-63c0-40ac-8f62-57f7720f7ddc}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_XPlanarGamePad
 VAR_IN_OUT
-	fbMover							: MC_PlanarMover;
-	fbMoverAxis						: ARRAY [1..cuiMoverAxisSize] OF AXIS_REF;
+	fbMover							: MC_PlanarMover; //XPlanar Mover
+	fbMoverAxis						: ARRAY [1..cuiMoverAxisSize] OF AXIS_REF; //ExternalSetPoint Axes 1-6:x,y,z,a,b,c
 END_VAR
 VAR_INPUT
-	GamePad							: ST_GamePad;
-	XPlanarGamePadCondition			: ST_XPlanarGamePadCondition;
-	KindMover						: uiKindMover := uiKindMover.AMP4330;
-	lrStickDeadZone					: LREAL := 10000;
-	lrMinLimitPosX					: LREAL := 0;
-	lrMaxLimitPosX					: LREAL := 960;
-	lrMinLimitPosY					: LREAL := 0;
-	lrMaxLimitPosY					: LREAL := 720;
+	GamePad							: ST_GamePad; //The GamePad input
+	XPlanarGamePadCondition			: ST_XPlanarGamePadCondition; //The moving Conditions
+	KindMover						: uiKindMover := uiKindMover.AMP4330; //The mover kind. To limit tile.
+	lrStickDeadZone					: LREAL := 10000; //The Stick DeadZone
+	lrMinLimitPosX					: LREAL := 0; //XPlanar Tile limit min position X.
+	lrMaxLimitPosX					: LREAL := 960; //XPlanar Tile limit max position X.
+	lrMinLimitPosY					: LREAL := 0; //XPlanar Tile limit min position Y.
+	lrMaxLimitPosY					: LREAL := 720; //XPlanar Tile limit max position Y.
 END_VAR
 VAR_OUTPUT
-	stStatus						: uiStatus_XPGamePad;
+	stStatus						: uiStatus_XPGamePad; //FB status
 END_VAR
 
 VAR //checkgamepad
-	afbR_Trig						: ARRAY [0..cuiGamePadSize] OF R_TRIG;
-	abToggle						: ARRAY [0..cuiGamePadSize] OF BOOL;
-	abBusy							: ARRAY [0..cuiGamePadSize] OF BOOL;
+	afbR_Trig						: ARRAY [0..cuiGamePadSize] OF R_TRIG; //Check GamePad trigger
+	abToggle						: ARRAY [0..cuiGamePadSize] OF BOOL; //A button trigger convert toggle. 
+	abBusy							: ARRAY [0..cuiGamePadSize] OF BOOL; //A button command busy check.
 	afbFeedback						: ARRAY [0..cuiGamePadSize] OF MC_PlanarFeedback;
 END_VAR
 VAR //command
@@ -58,13 +58,18 @@ VAR //command
 	//ButtonA
 	lrPosition_ButtonA				: LREAL;
 	stCondition_ButtonA				: DynamicConstraint_PathXY;
+	//ButtonY
+	fbTon_ButtonY					: TON;
+	fbTcRestart_ButtonY				: TC_Restart;
 	//ButtonLR
 	lrPosition_ButtonLR				: LREAL;
-	stCondition_ButtonLR			: DynamicConstraint_PathXY;
+	stCondition_ButtonLR			: DynamicConstraint_Path;
 
 	//Start
 	afbPower						: ARRAY [1..cuiMoverAxisSize] OF MC_Power;
 	bPowered						: BOOL; //Power
+	//Select
+	afbReset						: ARRAY [1..cuiMoverAxisSize] OF MC_Reset;
 END_VAR
 VAR //externalsetpoint
 	stSetpoint_Pos					: MoverVector;
@@ -600,6 +605,22 @@ uiGamePad.ButtonX:
 	
 uiGamePad.ButtonY:
 	//Reserve
+IF abToggle[uiGamePad.ButtonY] THEN
+	fbTon_ButtonY(IN:= TRUE, PT:= T#5S, Q=> , ET=> );
+	IF fbTon_ButtonY.Q THEN
+		fbTcRestart_ButtonY(
+			NETID:= , 
+			RESTART:= TRUE, 
+			TMOUT:= , 
+			BUSY=> , 
+			ERR=> , 
+			ERRID=> );
+	END_IF
+ELSE
+	fbTon_ButtonY(IN:= FALSE, PT:= T#5S, Q=> , ET=> );
+END_IF
+	
+	
 	 
 uiGamePad.ButtonLR:
 	//Cant move until moving XY
@@ -620,10 +641,10 @@ uiGamePad.ButtonLR:
 			stBasePos.c := stBasePos.c - 360;
 		END_IF
 		lrPosition_ButtonLR := stBasePos.c;
-		stCondition_ButtonLR.SetValuesVADJ(
-			V:= XPlanarGamePadCondition.lrVelocity_ABC, A:= XPlanarGamePadCondition.lrAcceleration_ABC, 
-			D:= XPlanarGamePadCondition.lrDeceleration_ABC, J:= XPlanarGamePadCondition.lrJerk_ABC
-		);
+		stCondition_ButtonLR.V := XPlanarGamePadCondition.lrVelocity_ABC;
+		stCondition_ButtonLR.A := XPlanarGamePadCondition.lrAcceleration_ABC;
+		stCondition_ButtonLR.D := XPlanarGamePadCondition.lrDeceleration_ABC;
+		stCondition_ButtonLR.J := XPlanarGamePadCondition.lrJerk_ABC;
 		fbMover.MoveC(
 			commandFeedback:= afbFeedback[uiGamePad.ButtonLR], 
 			targetPosition:= lrPosition_ButtonLR, 
@@ -690,12 +711,22 @@ uiGamePad.ButtonSelect:
 	IF abToggle[uiGamePad.ButtonSelect] AND NOT abBusy[uiGamePad.ButtonSelect] THEN
 		fbMover.Reset(commandFeedback:= afbFeedback[uiGamePad.ButtonSelect]);
 		abBusy[uiGamePad.ButtonSelect] := TRUE;
+		//ExternalSetPoint Axis error reset
+		FOR i:=1 TO cuiMoverAxisSize DO
+			afbReset[i].Execute := TRUE;
+			afbReset[i](Axis:= fbMoverAxis[i]);
+		END_FOR
 	ELSE
+		FOR i:=1 TO cuiMoverAxisSize DO
+			afbReset[i].Execute := FALSE;
+			afbReset[i](Axis:= fbMoverAxis[i]);
+		END_FOR
 		IF NOT afbFeedback[uiGamePad.ButtonSelect].Active THEN
 			abBusy[uiGamePad.ButtonSelect] := FALSE;
 			abToggle[uiGamePad.ButtonSelect] := FALSE;
 		END_IF
 	END_IF
+	
 END_CASE]]></ST>
       </Implementation>
     </Method>

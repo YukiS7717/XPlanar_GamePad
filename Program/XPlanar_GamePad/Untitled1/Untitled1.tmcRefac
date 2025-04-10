@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Refactors>
+  <Renames>
+    <RenamedSymbol>
+      <Type guid="d9dfe6f5-63c0-40ac-8f62-57f7720f7ddc">FB_XPlanarGamePad</Type>
+      <From>fbTcRestart</From>
+      <To>fbTcRestart_ButtonY</To>
+    </RenamedSymbol>
+  </Renames>
+</Refactors>
